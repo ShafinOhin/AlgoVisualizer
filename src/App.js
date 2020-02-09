@@ -1,20 +1,25 @@
 import React from 'react';
 import './App.css';
+import {CSSTransition} from 'react-transition-group'
+import { useSpring, animated } from 'react-spring'
 
-var gridDimension = [15, 35]
+var gridDimension = [21, 47]
+
 var itemStateArray = [];
 var sourceItemId = 252;
 var destinationItemId = 272;
 var globalAlgoValue;
 var currentSelectorState = 3;
 var mouseisDown = false;
-var globalDelay = 40;
-var globalIsAlgoRunning = false;
+var globalDelay = 12;
+var gridUpdateDelay = 10;
+var globalIsInputBlocked = false;
 var globalGridUpdaterID;
+var totalItem = gridDimension[0] * gridDimension[1];
 
 // ----- variables for algos ---------
-var level = new Array(560).fill(99999);
-var par = new Array(560);
+var level = new Array(totalItem).fill(99999);
+var par = new Array(totalItem);
 
 var dx = [1, -1, 0, 0];
 var dy = [0, 0, 1, -1];
@@ -34,7 +39,7 @@ const itemState = {
 const bgColors = [
   'white',
   'aqua',
-  'crimson',
+  'royalblue',
   'black',
   'chartreuse',
   'darkblue',
@@ -59,6 +64,7 @@ function Item (props){
     var styles= {
       backgroundColor: bgColors[props.stateArray[props.id]],
     }
+    
     return(
       <div className="item" id={props.id} 
         onClick={(e) => {props.itemCliked(e, props.id)}} 
@@ -81,8 +87,8 @@ function GridRow(props){
             handleMouseEnter = {(e, id) => props.handleMouseEnter(e, id)}
             handleMouseDown = {(e, id) => props.handleMouseDown(e, id)}
             handleMouseUp = {(e, id) => props.handleMouseUp(e, id)}
-            key = {(props.rowNum*35 + i).toString()}
-            id={(props.rowNum*35 + i).toString()} />)
+            key = {(props.rowNum*gridDimension[1] + i).toString()}
+            id={(props.rowNum*gridDimension[1] + i).toString()} />)
         }
     </div>
 }
@@ -128,7 +134,7 @@ function AlgorithmSelectForm(props){
         <option value="DFS">Depth first search</option>
         <option value="DJK">Dijkstra</option>
       </select>
-      <div className="start-button" onClick={props.startButtonClicked}>Start Visualize</div>
+      <button className="start-button" onClick={props.startButtonClicked}>Start Visualize</button>
     </form>
     
 
@@ -175,11 +181,10 @@ function TopInputContainer(props){
 class RootContainer extends React.Component{
   constructor(props){
     super(props);
-    //globalIsAlgoRunning = false;
     clearInterval(globalGridUpdaterID);
-    globalGridUpdaterID = setInterval(this.gridUpdater, globalDelay/2);
+    globalGridUpdaterID = setInterval(this.gridUpdater, gridUpdateDelay);
     this.cc = 0;
-    itemStateArray = new Array(560).fill(0);
+    itemStateArray = new Array(totalItem).fill(0);
     itemStateArray[sourceItemId] = itemState.source;
     itemStateArray[destinationItemId] = itemState.destination;
     this.state = {
@@ -209,16 +214,17 @@ class RootContainer extends React.Component{
 
   // AlgoEditorSecton Handlers
   handleAlgoChange(event){
-    if(globalIsAlgoRunning) return;
+    if(globalIsInputBlocked) return;
+    globalAlgoValue = event.target.value;
     this.setState({
       algoValue : event.target.value,
     });
-    globalAlgoValue = event.target.value;
+    
   }
 
   //Buttons Section Handlers
   handleSourceButtonClick(event){
-    if(globalIsAlgoRunning) return;
+    if(globalIsInputBlocked) return;
     currentSelectorState = 4;
     this.setState({
       sourceButton: 1,
@@ -230,7 +236,7 @@ class RootContainer extends React.Component{
   }
 
   handleDestinationButtonClick(event){
-    if(globalIsAlgoRunning) return;
+    if(globalIsInputBlocked) return;
     currentSelectorState = 5;
     this.setState({
       sourceButton: 0,
@@ -242,7 +248,7 @@ class RootContainer extends React.Component{
   }
 
   handleAddBlockButtonClick(event){
-    if(globalIsAlgoRunning) return;
+    if(globalIsInputBlocked) return;
     currentSelectorState = 3;
     this.setState({
       sourceButton: 0,
@@ -254,7 +260,7 @@ class RootContainer extends React.Component{
   }
 
   handleRemoveBlockButtonClick(event){
-    if(globalIsAlgoRunning) return;
+    if(globalIsInputBlocked) return;
     currentSelectorState = 0;
     this.setState({
       sourceButton: 0,
@@ -266,16 +272,16 @@ class RootContainer extends React.Component{
   }
 
   handleClearGridButtonClick(event){
-    if(globalIsAlgoRunning) return;
+    if(globalIsInputBlocked) return;
     event.preventDefault();
     this.clearGrid();
   }
 
     clearGrid(){
-      level = new Array(560).fill(99999);
-      par = new Array(560);
+      level = new Array(totalItem).fill(99999);
+      par = new Array(totalItem);
       Queue = [];
-      for(var ii=0; ii<560; ii++) itemStateArray[ii] = 0;
+      for(var ii=0; ii<totalItem; ii++) itemStateArray[ii] = 0;
       itemStateArray[sourceItemId] = itemState.source;
       itemStateArray[destinationItemId] = itemState.destination;
       this.setState({
@@ -286,27 +292,27 @@ class RootContainer extends React.Component{
 
   //GridClick Handler Functions
   handleItemClick(e, id){
-    if(globalIsAlgoRunning) return;
+    if(globalIsInputBlocked) return;
     this.setState({
       stateArray: itemStateArray,
     });
   }
 
   handleMouseEnter(e, id){
-    if(globalIsAlgoRunning) return;
+    if(globalIsInputBlocked) return;
     if(mouseisDown)
       this.updateState(id);
   }
 
   handleMouseDown(e, id){
-    if(globalIsAlgoRunning) return;
+    if(globalIsInputBlocked) return;
     mouseisDown = true;
     e.preventDefault();
     this.updateState(id);
   }
 
   handleMouseUp(e, id){
-    if(globalIsAlgoRunning) return;
+    if(globalIsInputBlocked) return;
     //mouseisDown = false;
   }
 
@@ -342,16 +348,20 @@ class RootContainer extends React.Component{
 
   startButtonClicked(event){
     event.preventDefault();
-    if(globalIsAlgoRunning) return;
+    if(globalIsInputBlocked) return;
+    globalGridUpdaterID = setInterval(this.gridUpdater, 10);
     this.clearVisited();
-    globalIsAlgoRunning = true;
-    runBFS();
+    console.log("Global Algo value: " + this.state.algoValue);
+    switch(this.state.algoValue){
+      case "BFS": runBFSS(); console.log("Starting bfss"); break;
+      case "DFS": runDFS(); break;
+    }
   }
     clearVisited(){
-      level = new Array(560).fill(99999);
-      par = new Array(560);
+      level = new Array(totalItem).fill(99999);
+      par = new Array(totalItem);
       Queue = [];
-      for(var ii=0; ii<560; ii++) if(itemStateArray[ii] != itemState.block) 
+      for(var ii=0; ii<totalItem; ii++) if(itemStateArray[ii] != itemState.block) 
         {itemStateArray[ii] = itemState.unvisited;}
       itemStateArray[sourceItemId] = itemState.source;
       itemStateArray[destinationItemId] = itemState.destination;
@@ -371,8 +381,8 @@ class RootContainer extends React.Component{
   }
 
   render(){
-    if(globalIsAlgoRunning) console.log("Algo is running!!");
-    //if(globalIsAlgoRunning == false) clearInterval(globalGridUpdaterID);
+    if(globalIsInputBlocked == false) clearInterval(globalGridUpdaterID);
+    console.log("grid updated");
     return <div className="inside-root-container" 
                 onMouseDown={(e) => GlobalhandleMouseDown(e)}
                 onMouseUp={(e) => GlobalhandleMouseUp(e)}
@@ -401,27 +411,34 @@ class RootContainer extends React.Component{
 }
 
 function App() {
-  return (
+  const fadeIn = useSpring({
+    from: {
+      opacity: 0
+    },
+    to: {
+      opacity: 1
+    }
+  });
+  return ( 
+    <animated.div style={fadeIn}>
       <RootContainer />
+    </animated.div>
   );
 }
 
 export default App;
 
 
-// Correct Till nowwwwwwwwwwwww
-
-
 
 function getCoOrdinate(id){
   return [
-    parseInt(id)%35,
-    parseInt(parseInt(id)/35)
+    parseInt(id)%gridDimension[1],
+    parseInt(parseInt(id)/gridDimension[1])
   ]
 }
 
 function getId(coOrdinate){
-  return (coOrdinate[1])*35 + coOrdinate[0];
+  return (coOrdinate[1])*gridDimension[1] + coOrdinate[0];
 }
 
 
@@ -429,64 +446,126 @@ function getId(coOrdinate){
 
 ////////------------------------------ ----------- BFS ALgo -----------------------------
 
-// ----------- variables for bfs -----------
-var globalBFSIntervalID;
-var globalBFSPathShowerID;
-var finalPath = [];
 
-function runBFS(){
-  for(var tt=0; tt<560; tt++) par[tt] = tt;
+function runBFSS(){
+  var visitedQueue = [];
+  var pathQueue = [];
+  var doneAlgo = false;
+  var copiedArray = [];
+  for(var tt=0; tt<totalItem; tt++){
+    par[tt] = tt;
+    copiedArray.push(itemStateArray[tt]);
+  }
   Queue.push(getCoOrdinate(sourceItemId));
   level[sourceItemId] = 0;
   console.log("BFS running");
-  globalBFSIntervalID = setInterval(BFSNextStep, globalDelay);
-}
-
-
-function BFSNextStep(){
-  if(Queue.length == 0) return;
-  var cr = Queue.shift();
-  var crID = getId(cr);
-  //console.log(crID);
-  for(var ii=0; ii<4; ii++){
-    var [x, y] = [cr[0]+dx[ii], cr[1]+dy[ii]];
-    var ID = getId([x,y]);
-    if(ID == destinationItemId){
-      clearInterval(globalBFSIntervalID);
-      par[ID] = crID;
-      showPath();
-      console.log("Found! ", level[crID]+1);
-      return;
-    }
-    if(x < gridDimension[1] && x>=0 && y<gridDimension[0] && y>=0){
-      if(itemStateArray[ID] != itemState.visited && itemStateArray[ID] != itemState.block && ID != sourceItemId){
-        itemStateArray[ID] = itemState.visited;
-        Queue.push([x,y]);
-        level[ID] = level[crID] + 1;
+  while(Queue.length != 0){
+    var cr = Queue.shift();
+    var crID = getId(cr);
+    for(var ii=0; ii<4; ii++){
+      var [x, y] = [cr[0]+dx[ii], cr[1]+dy[ii]];
+      var ID = getId([x,y]);
+      if(ID == destinationItemId){
         par[ID] = crID;
-        //gridUpdater();
-        //Delay Needed!!!!!
+        console.log("Found! ", level[crID]+1);
+        doneAlgo = true;
+        break;
       }
-    }
-  } 
+      if(x < gridDimension[1] && x>=0 && y<gridDimension[0] && y>=0){
+        if(copiedArray[ID] != itemState.visited && copiedArray[ID] != itemState.block && ID != sourceItemId){
+          copiedArray[ID] = itemState.visited;
+          visitedQueue.push(ID);
+          Queue.push([x,y]);
+          level[ID] = level[crID] + 1;
+          par[ID] = crID;
+        }
+      }
+    } 
+    if(doneAlgo) break;
+  }
+
+  let tempDestinationID = destinationItemId;
+  while(par[tempDestinationID] != tempDestinationID){
+    pathQueue.push(tempDestinationID);
+    tempDestinationID = par[tempDestinationID];
+  }
+
+  let timer = animateQueue(visitedQueue, itemState.visited, 0);
+  animateQueue(pathQueue.reverse(), itemState.pathItem, timer + 2);
+  
 }
 
-function showPath(){
-  var destCopy = destinationItemId;
-  while(par[destCopy] != destCopy){
-    finalPath.push(destCopy);
-    destCopy = par[destCopy];
+
+/// -------------------------------- DFS algo -----------------------------------
+
+function runDFS(){
+  var visitedQueue = [];
+  var pathQueue = [];
+  var doneAlgo = false;
+  var copiedArray = [];
+  for(var tt=0; tt<totalItem; tt++){
+    par[tt] = tt;
+    copiedArray.push(itemStateArray[tt]);
   }
-  globalBFSPathShowerID = setInterval(updatePath, globalDelay);
+  Queue = [];
+  Queue.push(getCoOrdinate(sourceItemId));
+  while(Queue.length != 0){
+    console.log("DFS RUNNNING");
+    var cr = Queue.pop();
+    var crID = getId(cr);
+    for(var ii=0; ii<4; ii++){
+      var [x, y] = [cr[0]+dx[ii], cr[1]+dy[ii]];
+      var ID = getId([x,y]);
+      if(ID == destinationItemId){
+        par[ID] = crID;
+        console.log("Found! ");
+        doneAlgo = true;
+        break;
+      }
+      if(x < gridDimension[1] && x>=0 && y<gridDimension[0] && y>=0){
+        if(copiedArray[ID] != itemState.visited && copiedArray[ID] != itemState.block && ID != sourceItemId){
+          copiedArray[ID] = itemState.visited;
+          visitedQueue.push(ID);
+          Queue.push([x,y]);
+          par[ID] = crID;
+        }
+      }
+    } 
+    if(doneAlgo) break;
+  }
+
+  let tempDestinationID = destinationItemId;
+  while(par[tempDestinationID] != tempDestinationID){
+    pathQueue.push(tempDestinationID);
+    tempDestinationID = par[tempDestinationID];
+  }
+
+  let timer = animateQueue(visitedQueue, itemState.visited, 0);
+  animateQueue(pathQueue.reverse(), itemState.pathItem, timer + 2);
+
 }
 
-function updatePath(){
-  if(finalPath.length == 0){
-    globalIsAlgoRunning = false;
-    clearInterval(globalBFSPathShowerID);
-    return;
+
+
+// ------------------------------- Animator Function ---------------------------
+
+function animateQueue(Queue, boxType, timer){
+  var animeTimer = timer;
+  globalIsInputBlocked = true;
+  setTimeout(() => {
+    globalIsInputBlocked = false;
+  }, (animeTimer + ((Queue.length + 1) * 2)) * globalDelay);
+  while(Queue.length != 0){
+    let xyid = Queue.shift();
+    setTimeout(() => {
+      globalIsInputBlocked = true;
+      itemStateArray[xyid] = itemState.current;
+    }, (animeTimer+0.1) * globalDelay);
+    setTimeout(() => {
+      globalIsInputBlocked = true;
+      itemStateArray[xyid] = boxType;
+    }, (animeTimer+1.9) * globalDelay);
+    animeTimer += 2;
   }
-  console.log("updating path")
-  var temp = finalPath.pop();
-  itemStateArray[temp] = itemState.pathItem;
+  return animeTimer;
 }
